@@ -1,0 +1,32 @@
+# =============================================================================
+# dbt connection profiles. Contains ONLY env_var() lookups and safe local
+# defaults — no credentials — so it is committed. Real secrets go in ../.env
+# (git-ignored) and are passed through by docker-compose / the Makefile.
+#
+# Pick the target with DBT_TARGET (duckdb | snowflake).
+# =============================================================================
+retail_analytics:
+  target: "{{ env_var('DBT_TARGET', 'duckdb') }}"
+
+  outputs:
+
+    # ---- Local, zero-credential warehouse ---------------------------------
+    duckdb:
+      type: duckdb
+      path: "{{ env_var('DUCKDB_PATH', '/workspace/dbt/retail.duckdb') }}"
+      threads: 4
+      schema: analytics          # staging/marts land here; raw.* is loaded by load_raw.py
+
+    # ---- Snowflake -------------------------------------------------------
+    snowflake:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('SNOWFLAKE_USER') }}"
+      password: "{{ env_var('SNOWFLAKE_PASSWORD') }}"
+      role: "{{ env_var('SNOWFLAKE_ROLE', 'RETAIL_AE_ROLE') }}"
+      warehouse: "{{ env_var('SNOWFLAKE_WAREHOUSE', 'RETAIL_WH') }}"
+      database: "{{ env_var('SNOWFLAKE_DATABASE', 'RETAIL') }}"
+      schema: "{{ env_var('SNOWFLAKE_ANALYTICS_SCHEMA', 'ANALYTICS') }}"
+      threads: "{{ env_var('SNOWFLAKE_THREADS', '4') | int }}"
+      client_session_keep_alive: false
+      query_tag: retail-analytics-engineering

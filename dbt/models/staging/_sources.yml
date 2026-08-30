@@ -1,0 +1,111 @@
+version: 2
+
+sources:
+  - name: olist
+    description: >
+      Raw Brazilian E-Commerce Public Dataset by Olist, loaded verbatim from CSV
+      into the warehouse RAW schema by `scripts/load_raw.py`. Column names are
+      exactly as published (including the misspelled `product_name_lenght`).
+    # RAW lives in the same database as the analytics target, different schema.
+    # (Snowflake: RETAIL.RAW ; DuckDB: retail.raw — both loaded by load_raw.py.)
+    schema: raw
+
+    freshness: null  # static public dataset — freshness checks are not meaningful
+
+    tables:
+      - name: orders
+        description: One row per order. `order_id` is unique.
+        columns:
+          - name: order_id
+            data_tests: [not_null, unique]
+          - name: customer_id
+            description: FK to customers.customer_id (per-order customer identity).
+            data_tests: [not_null]
+          - name: order_status
+            data_tests:
+              - accepted_values:
+                  values: [delivered, shipped, canceled, unavailable, invoiced,
+                           processing, created, approved]
+
+      - name: order_items
+        description: >
+          One row per order line item. Grain = (order_id, order_item_id) where
+          order_item_id is a 1..n sequence within the order (also encodes quantity).
+        columns:
+          - name: order_id
+            data_tests:
+              - not_null
+              - relationships:
+                  to: source('olist', 'orders')
+                  field: order_id
+          - name: product_id
+            data_tests: [not_null]
+          - name: seller_id
+            data_tests: [not_null]
+          - name: price
+            data_tests: [not_null]
+
+      - name: order_payments
+        description: One row per payment instrument used on an order.
+        columns:
+          - name: order_id
+            data_tests:
+              - not_null
+              - relationships:
+                  to: source('olist', 'orders')
+                  field: order_id
+          - name: payment_type
+            data_tests:
+              - accepted_values:
+                  values: [credit_card, boleto, voucher, debit_card, not_defined]
+
+      - name: order_reviews
+        description: >
+          One row per customer review. `review_id` is NOT unique in the source
+          (a review can be linked to multiple orders); (review_id, order_id) is.
+        columns:
+          - name: order_id
+            data_tests: [not_null]
+          - name: review_score
+            data_tests:
+              - accepted_values:
+                  values: [1, 2, 3, 4, 5]
+                  quote: false
+
+      - name: customers
+        description: >
+          One row per per-order customer identity. `customer_id` is unique here
+          and joins to orders; `customer_unique_id` is the stable shopper key.
+        columns:
+          - name: customer_id
+            data_tests: [not_null, unique]
+          - name: customer_unique_id
+            data_tests: [not_null]
+
+      - name: products
+        description: One row per product. `product_id` is unique.
+        columns:
+          - name: product_id
+            data_tests: [not_null, unique]
+
+      - name: sellers
+        description: One row per seller. `seller_id` is unique.
+        columns:
+          - name: seller_id
+            data_tests: [not_null, unique]
+
+      - name: geolocation
+        description: >
+          Lat/long points per zip-code prefix. Multiple rows per prefix; used
+          only for optional regional enrichment, not joined into the fact.
+        columns:
+          - name: geolocation_zip_code_prefix
+            data_tests: [not_null]
+
+      - name: product_category_name_translation
+        description: Portuguese -> English product category lookup (71 rows).
+        columns:
+          - name: product_category_name
+            data_tests: [not_null, unique]
+          - name: product_category_name_english
+            data_tests: [not_null]

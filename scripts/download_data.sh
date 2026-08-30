@@ -19,9 +19,15 @@ if ! command -v kaggle >/dev/null 2>&1; then
   exit 1
 fi
 
-if [[ ! -f "$HOME/.kaggle/kaggle.json" && ( -z "${KAGGLE_USERNAME:-}" || -z "${KAGGLE_KEY:-}" ) ]]; then
+have_creds=0
+[[ -f "$HOME/.kaggle/kaggle.json" ]] && have_creds=1
+[[ -f "$HOME/.kaggle/access_token" ]] && have_creds=1
+[[ -n "${KAGGLE_API_TOKEN:-}" ]] && have_creds=1
+[[ -n "${KAGGLE_USERNAME:-}" && -n "${KAGGLE_KEY:-}" ]] && have_creds=1
+if [[ "$have_creds" -eq 0 ]]; then
   echo "No Kaggle credentials found." >&2
-  echo "See DATA_SETUP.md — put kaggle.json at ~/.kaggle/kaggle.json or set KAGGLE_USERNAME/KAGGLE_KEY." >&2
+  echo "See DATA_SETUP.md — provide one of:" >&2
+  echo "  ~/.kaggle/kaggle.json  |  ~/.kaggle/access_token  |  KAGGLE_API_TOKEN  |  KAGGLE_USERNAME+KAGGLE_KEY" >&2
   exit 1
 fi
 

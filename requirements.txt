@@ -1,0 +1,20 @@
+# dbt + adapters -------------------------------------------------------------
+# dbt-snowflake pulls a compatible snowflake-connector-python itself — do not
+# pin the connector separately or the resolver conflicts.
+dbt-core~=1.9.0
+dbt-duckdb~=1.9.0
+dbt-snowflake~=1.9.0
+
+# Local warehouse engine ----------------------------------------------------
+duckdb~=1.1
+
+# Data loading / ingestion ------------------------------------------------
+pandas~=2.2
+kaggle~=1.6
+
+# SQL linting -------------------------------------------------------------
+sqlfluff~=3.2
+
+# Analysis notebooks ----------------------------------------------------
+jupyterlab~=4.3
+matplotlib~=3.9

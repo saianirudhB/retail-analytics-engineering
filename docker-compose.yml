@@ -1,0 +1,20 @@
+# =============================================================================
+# One service: the dbt runtime. The warehouse itself is NOT containerised —
+# the local target is an embedded DuckDB file, and the cloud target is
+# Snowflake (managed). Containerising a warehouse here would add nothing.
+# =============================================================================
+services:
+  dbt:
+    build: .
+    image: retail-ae/dbt:1.9.4
+    working_dir: /workspace/dbt
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DBT_TARGET: ${DBT_TARGET:-duckdb}
+    volumes:
+      - .:/workspace
+    # `docker compose run --rm dbt <command>` — e.g. `... dbt build`
+    entrypoint: []
+    command: ["bash"]

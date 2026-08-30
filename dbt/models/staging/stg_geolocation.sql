@@ -10,7 +10,7 @@ cleaned as (
         lpad(cast(geolocation_zip_code_prefix as varchar), 5, '0') as zip_code_prefix,
         cast(geolocation_lat as double)                            as latitude,
         cast(geolocation_lng as double)                            as longitude,
-        initcap(trim(geolocation_city))                            as city,
+        lower(trim(geolocation_city))                             as city,
         upper(trim(geolocation_state))                             as state
     from source
     -- a handful of rows carry lat/long outside Brazil's bounding box

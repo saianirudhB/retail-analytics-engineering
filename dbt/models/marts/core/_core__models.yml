@@ -1,0 +1,123 @@
+version: 2
+
+models:
+  - name: dim_date
+    description: >
+      Conformed calendar dimension, one row per day from `date_start` to
+      `date_end` (dbt vars). Joined from every date FK in fact_order_items.
+      **Grain:** one row per calendar day.
+    columns:
+      - name: date_key
+        description: Integer YYYYMMDD surrogate key.
+        data_tests: [not_null, unique]
+      - name: date
+        data_tests: [not_null]
+      - name: is_weekend
+        data_tests: [not_null]
+      - name: day_of_week
+        description: 0 = Sunday … 6 = Saturday.
+        data_tests:
+          - accepted_values: { values: [0,1,2,3,4,5,6], quote: false }
+
+  - name: dim_customers
+    description: >
+      Customer dimension at the **stable shopper grain** (`customer_unique_id`).
+      Location attributes are current-value (type 1), taken from the shopper's
+      most recent order. See docs/data-model.md for the SCD rationale.
+    columns:
+      - name: customer_key
+        description: Surrogate key = hash(customer_unique_id).
+        data_tests: [not_null, unique]
+      - name: customer_unique_id
+        data_tests: [not_null, unique]
+      - name: customer_state
+        description: Two-letter Brazilian state code.
+      - name: customer_region
+        data_tests:
+          - accepted_values:
+              values: [North, Northeast, Central-West, Southeast, South, Unknown]
+      - name: lifetime_order_count
+        data_tests:
+          - dbt_utils.accepted_range: { min_value: 1, inclusive: true }
+
+  - name: dim_products
+    description: "Product dimension. **Grain:** product_id. Type-1 attributes."
+    columns:
+      - name: product_key
+        data_tests: [not_null, unique]
+      - name: product_id
+        data_tests: [not_null, unique]
+      - name: product_category
+        data_tests: [not_null]
+      - name: weight_band
+        data_tests:
+          - accepted_values:
+              values: ['light (<0.5kg)', 'medium (0.5-2kg)', 'heavy (2-10kg)',
+                       'bulky (>10kg)', 'unknown']
+
+  - name: dim_sellers
+    description: "Seller dimension. **Grain:** seller_id. Type-1 attributes."
+    columns:
+      - name: seller_key
+        data_tests: [not_null, unique]
+      - name: seller_id
+        data_tests: [not_null, unique]
+      - name: seller_region
+        data_tests:
+          - accepted_values:
+              values: [North, Northeast, Central-West, Southeast, South, Unknown]
+
+  - name: fact_order_items
+    description: >
+      Transaction fact. **Grain: one row per order line item**
+      — (order_id, order_item_number). `order_item_key` is the unique surrogate PK.
+
+      Additive measures: item_price, freight_value, item_total_value,
+      item_quantity, allocated_payment_value.
+      Order-level measures (identical across an order's lines — average per order,
+      never sum across lines; filter with `is_first_item_in_order`):
+      delivery_days, estimated_delivery_days, delivery_delay_days, review_score.
+    columns:
+      - name: order_item_key
+        data_tests: [not_null, unique]
+      - name: order_id
+        data_tests:
+          - not_null
+          - relationships: { to: ref('stg_orders'), field: order_id }
+      - name: customer_key
+        description: FK to dim_customers. Null only for orders whose customer row is missing upstream.
+        data_tests:
+          - relationships: { to: ref('dim_customers'), field: customer_key }
+      - name: product_key
+        data_tests:
+          - not_null
+          - relationships: { to: ref('dim_products'), field: product_key }
+      - name: seller_key
+        data_tests:
+          - not_null
+          - relationships: { to: ref('dim_sellers'), field: seller_key }
+      - name: order_purchased_date_key
+        data_tests:
+          - not_null
+          - relationships: { to: ref('dim_date'), field: date_key }
+      - name: item_price
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range: { min_value: 0, inclusive: false }
+      - name: freight_value
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range: { min_value: 0, inclusive: true }
+      - name: item_total_value
+        data_tests: [not_null]
+      - name: review_score
+        data_tests:
+          - accepted_values: { values: [1,2,3,4,5], quote: false }
+      - name: order_status
+        data_tests:
+          - accepted_values:
+              values: [delivered, shipped, canceled, unavailable, invoiced,
+                       processing, created, approved]
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [order_id, order_item_number]

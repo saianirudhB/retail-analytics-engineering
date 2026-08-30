@@ -1,0 +1,60 @@
+version: 2
+
+models:
+  - name: fct_orders
+    description: >
+      Order-grain roll-up of fact_order_items (one row per order). The single
+      place the "what counts as an order / as revenue" rules are defined. All
+      other metric models build on this.
+    columns:
+      - name: order_id
+        data_tests: [not_null, unique]
+      - name: recognised_product_revenue
+        description: product_revenue when order_status ∈ revenue_order_statuses, else 0.
+      - name: is_revenue_order
+        data_tests:
+          - accepted_values: { values: [0, 1], quote: false }
+
+  - name: metrics_orders_daily
+    description: Daily company KPIs — orders, revenue, items, AOV, cancellation rate. One row per purchase date.
+    columns:
+      - name: date_key
+        data_tests: [not_null, unique]
+      - name: avg_order_value
+        description: recognised product revenue / revenue orders for the day.
+
+  - name: metrics_category_performance
+    description: Per-product-category revenue, volume and review performance.
+    columns:
+      - name: product_category
+        data_tests: [not_null, unique]
+
+  - name: metrics_seller_performance
+    description: Per-seller scorecard — revenue, volume, delivery and review performance.
+    columns:
+      - name: seller_id
+        data_tests: [not_null, unique]
+      - name: on_time_delivery_rate
+        description: Share of the seller's delivered orders arriving on/before the promised date.
+
+  - name: metrics_delivery_performance
+    description: Monthly delivery operations KPIs (delivered orders only for duration/delay).
+    columns:
+      - name: year_month
+        description: Integer YYYYMM.
+        data_tests: [not_null, unique]
+
+  - name: metrics_customer_rfm
+    description: >
+      Per-customer value and RFM-style segment. Recency is measured against the
+      last purchase date in the dataset, not the current date.
+    columns:
+      - name: customer_key
+        data_tests: [not_null, unique]
+      - name: customer_segment
+        data_tests:
+          - accepted_values:
+              values: ['loyal', 'returning', 'recent one-time', 'lapsed one-time']
+
+  - name: metrics_executive_summary
+    description: Single-row KPI snapshot for the dashboard header. Ties out to the detailed metric models.

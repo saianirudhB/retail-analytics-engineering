@@ -1,0 +1,141 @@
+version: 2
+
+models:
+  - name: stg_orders
+    description: >
+      One row per order. Light cleaning of `raw.orders`: renamed columns,
+      timestamps cast, `order_status` lower-cased. **Grain:** order_id.
+    columns:
+      - name: order_id
+        description: Natural key of an order.
+        data_tests: [not_null, unique]
+      - name: customer_id
+        description: Per-order customer identity — FK to stg_customers.customer_id.
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('stg_customers')
+              field: customer_id
+      - name: order_status
+        description: Lifecycle status at extract time.
+        data_tests:
+          - accepted_values:
+              values: [delivered, shipped, canceled, unavailable, invoiced,
+                       processing, created, approved]
+      - name: purchased_at
+        description: When the customer placed the order. Primary order date.
+        data_tests: [not_null]
+      - name: estimated_delivery_at
+        description: Delivery date promised to the customer at purchase.
+
+  - name: stg_order_items
+    description: >
+      One row per order line item. **Grain:** (order_id, order_item_number).
+      `order_item_number` runs 1..n within an order and encodes quantity.
+    columns:
+      - name: order_item_key
+        description: Surrogate key = hash(order_id, order_item_id).
+        data_tests: [not_null, unique]
+      - name: order_id
+        data_tests:
+          - not_null
+          - relationships: { to: ref('stg_orders'), field: order_id }
+      - name: product_id
+        data_tests:
+          - not_null
+          - relationships: { to: ref('stg_products'), field: product_id }
+      - name: seller_id
+        data_tests:
+          - not_null
+          - relationships: { to: ref('stg_sellers'), field: seller_id }
+      - name: item_price
+        description: Item price in BRL, excluding freight.
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range: { min_value: 0, inclusive: false }
+      - name: freight_value
+        description: Freight charged for this item in BRL.
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range: { min_value: 0, inclusive: true }
+      - name: item_total_value
+        description: item_price + freight_value (BRL).
+
+  - name: stg_order_payments
+    description: >
+      One row per payment instrument on an order.
+      **Grain:** (order_id, payment_sequential).
+    columns:
+      - name: order_id
+        data_tests:
+          - not_null
+          - relationships: { to: ref('stg_orders'), field: order_id }
+      - name: payment_type
+        data_tests:
+          - accepted_values:
+              values: [credit_card, boleto, voucher, debit_card, not_defined]
+      - name: payment_value
+        description: Amount settled on this instrument (BRL).
+        data_tests:
+          - dbt_utils.accepted_range: { min_value: 0, inclusive: true }
+
+  - name: stg_order_reviews
+    description: >
+      One row per review row in the source. **Grain:** (review_id, order_id) —
+      `review_id` alone is NOT unique. Deduped to one row per order in
+      `int_order_reviews`.
+    columns:
+      - name: review_id
+        data_tests: [not_null]
+      - name: order_id
+        data_tests:
+          - not_null
+          - relationships: { to: ref('stg_orders'), field: order_id }
+      - name: review_score
+        description: 1–5 star rating.
+        data_tests:
+          - not_null
+          - accepted_values: { values: [1, 2, 3, 4, 5], quote: false }
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [review_id, order_id]
+
+  - name: stg_customers
+    description: >
+      One row per per-order customer identity. **Grain:** customer_id.
+      `customer_unique_id` is the stable shopper key.
+    columns:
+      - name: customer_id
+        data_tests: [not_null, unique]
+      - name: customer_unique_id
+        data_tests: [not_null]
+      - name: customer_state
+        description: Two-letter Brazilian state code (UF), upper-cased.
+
+  - name: stg_products
+    description: >
+      One row per product, with the English `product_category` resolved from
+      the PT→EN translation table. **Grain:** product_id.
+    columns:
+      - name: product_id
+        data_tests: [not_null, unique]
+      - name: product_category
+        description: English category name; 'unknown' when the source is null.
+        data_tests: [not_null]
+
+  - name: stg_sellers
+    description: "One row per seller. **Grain:** seller_id."
+    columns:
+      - name: seller_id
+        data_tests: [not_null, unique]
+      - name: seller_state
+        description: Two-letter Brazilian state code (UF), upper-cased.
+
+  - name: stg_geolocation
+    description: >
+      One representative point per 5-digit zip-code prefix (centroid lat/long +
+      modal city/state), collapsed from the ~1M-row raw geolocation table.
+      **Grain:** zip_code_prefix.
+    columns:
+      - name: zip_code_prefix
+        data_tests: [not_null, unique]
